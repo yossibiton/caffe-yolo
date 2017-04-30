@@ -110,7 +110,7 @@ class CaffeScaleLayer(CaffeLayerGenerator):
 
 class CaffeReluLayer(CaffeLayerGenerator):
     def __init__(self, name, negslope=None):
-        super(CaffeReluLayer, self).__init__(name, 'Relu')
+        super(CaffeReluLayer, self).__init__(name, 'ReLU')
         self.negslope = negslope
     def write(self, f):
         param_str = ""
@@ -198,10 +198,12 @@ class CaffeProtoGenerator:
         self.layer.bottom.append( prev_blob )
         self.layer.top.append( lname )
         self.add_layer( self.layer )
-    def add_relu_layer(self, items):
+    def add_relu_layer(self, items, is_relu_leaked):
         prev_blob = self.layer.top[0]
         lname = "relu"+str(self.lnum)
-        self.layer = CaffeReluLayer( lname )
+        negslope = 0.1 if is_relu_leaked else None
+            
+        self.layer = CaffeReluLayer( lname, negslope )
         self.layer.bottom.append( prev_blob )
         self.layer.top.append( prev_blob )     # loopback
         self.add_layer( self.layer )
@@ -256,6 +258,10 @@ def convert(cfgfile, ptxtfile):
             batchnorm_followed = True
         if 'activation' in items and items['activation'] != 'linear':
             relu_followed = True
+            is_relu_leaked = False
+            if items['activation'] == 'leaky':
+                is_relu_leaked = True
+                
         #
         if _section == 'net':
             gen.add_input_layer(items)
@@ -265,11 +271,11 @@ def convert(cfgfile, ptxtfile):
                 gen.add_batchnorm_layer(items)
                 gen.add_scale_layer(items)
             if relu_followed:
-                gen.add_relu_layer(items)
+                gen.add_relu_layer(items, is_relu_leaked)
         elif _section == 'connected':
             gen.add_innerproduct_layer(items)
             if relu_followed:
-                gen.add_relu_layer(items)
+                gen.add_relu_layer(items, is_relu_leaked)
         elif _section == 'maxpool':
             gen.add_pooling_layer('MAX', items)
         elif _section == 'avgpool':
